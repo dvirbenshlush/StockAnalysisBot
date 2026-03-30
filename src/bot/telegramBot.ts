@@ -1,4 +1,5 @@
 import TelegramBotAPI from 'node-telegram-bot-api';
+import express from 'express';
 import { YouTubeScraper } from '../scrapers/youtubeScraper';
 import { TelegramScraper } from '../scrapers/telegramScraper';
 import { WhatsAppScraper } from '../scrapers/whatsappScraper';
@@ -40,20 +41,8 @@ export class TelegramBot {
     const webhookUrl = process.env.WEBHOOK_URL
       ?? (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null);
 
-    if (webhookUrl) {
-      // Webhook mode for production (Railway) — no polling conflict
-      this.bot = new TelegramBotAPI(token, {
-        webHook: {
-          port: parseInt(process.env.PORT ?? '3000', 10),
-          host: '0.0.0.0',
-        },
-      });
-    } else {
-      // Polling mode for local dev
-      this.bot = new TelegramBotAPI(token, {
-        polling: { interval: 1000, autoStart: false },
-      });
-    }
+    // Always start in polling:false mode — we manage the transport ourselves
+    this.bot = new TelegramBotAPI(token, { polling: false });
     this._webhookUrl = webhookUrl;
     this.youtube = youtube;
     this.telegram = telegram;
@@ -73,11 +62,8 @@ export class TelegramBot {
     this.scheduler.start();
 
     if (this._webhookUrl) {
-      const token = process.env.TELEGRAM_BOT_TOKEN!;
-      await this.bot.setWebHook(`${this._webhookUrl}/bot${token}`);
-      logger.info(`Webhook mode active: ${this._webhookUrl}`);
+      await this.startWebhookServer();
     } else {
-      // Clear any stale webhook before polling
       await this.bot.deleteWebHook();
       this.startPollingWithRetry();
     }
@@ -399,6 +385,35 @@ export class TelegramBot {
     const crossRefSummary = this.crossRef.formatCrossRefSummary(crossRefResults);
 
     return `${summary}\n\n${crossRefSummary}`;
+  }
+
+  private async startWebhookServer(): Promise<void> {
+    const token = process.env.TELEGRAM_BOT_TOKEN!;
+    const port = parseInt(process.env.PORT ?? '3000', 10);
+    const webhookPath = `/bot${token}`;
+
+    const app = express();
+    app.use(express.json());
+
+    // Health check — Railway uses this to verify the container is alive
+    app.get('/', (_req, res) => res.json({ status: 'ok' }));
+    app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+    // Telegram sends updates here
+    app.post(webhookPath, (req, res) => {
+      this.bot.processUpdate(req.body);
+      res.sendStatus(200);
+    });
+
+    await new Promise<void>((resolve) => {
+      app.listen(port, '0.0.0.0', () => {
+        logger.info(`Webhook server listening on port ${port}`);
+        resolve();
+      });
+    });
+
+    await this.bot.setWebHook(`${this._webhookUrl}${webhookPath}`);
+    logger.info(`Webhook registered: ${this._webhookUrl}${webhookPath}`);
   }
 
   private startPollingWithRetry(): void {
