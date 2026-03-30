@@ -43,7 +43,10 @@ export class TelegramBot {
     if (webhookUrl) {
       // Webhook mode for production (Railway) — no polling conflict
       this.bot = new TelegramBotAPI(token, {
-        webHook: { port: parseInt(process.env.PORT ?? '3000', 10) },
+        webHook: {
+          port: parseInt(process.env.PORT ?? '3000', 10),
+          host: '0.0.0.0',
+        },
       });
     } else {
       // Polling mode for local dev
