@@ -36,7 +36,16 @@ export class TelegramBot {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) throw new Error('TELEGRAM_BOT_TOKEN is required');
 
-    this.bot = new TelegramBotAPI(token, { polling: true });
+    const webhookUrl = process.env.WEBHOOK_URL;
+    if (webhookUrl) {
+      // Webhook mode for production (Railway) — no polling conflict
+      this.bot = new TelegramBotAPI(token, {
+        webHook: { port: parseInt(process.env.PORT ?? '3000', 10) },
+      });
+    } else {
+      // Polling mode for local dev
+      this.bot = new TelegramBotAPI(token, { polling: true });
+    }
     this.youtube = youtube;
     this.telegram = telegram;
     this.whatsapp = whatsapp;
@@ -53,12 +62,21 @@ export class TelegramBot {
     this.registerChannelListener();
     await this.whatsapp.connect();
     this.scheduler.start();
-    this.startPolling();
+
+    const webhookUrl = process.env.WEBHOOK_URL;
+    if (webhookUrl) {
+      const token = process.env.TELEGRAM_BOT_TOKEN!;
+      await this.bot.setWebHook(`${webhookUrl}/bot${token}`);
+      logger.info(`Webhook set to ${webhookUrl}/bot<token>`);
+    } else {
+      this.startPolling();
+    }
+
     logger.info('Telegram bot started');
   }
 
   stop(): void {
-    this.bot.stopPolling();
+    if (!process.env.WEBHOOK_URL) this.bot.stopPolling();
     if (this.pollInterval) clearInterval(this.pollInterval);
   }
 
