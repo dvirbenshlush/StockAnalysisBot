@@ -31,6 +31,11 @@ export class WhatsAppScraper {
   }
 
   async connect(): Promise<void> {
+    if (process.env.WHATSAPP_ENABLED !== 'true') {
+      logger.info('WhatsApp disabled — set WHATSAPP_ENABLED=true in .env to enable');
+      return;
+    }
+
     try {
       // Dynamic import to avoid build errors when baileys is not installed
       // Install with: npm install @whiskeysockets/baileys
@@ -44,7 +49,7 @@ export class WhatsAppScraper {
 
       const { state, saveCreds } = await useMultiFileAuthState(this.sessionPath);
 
-      this.client = makeWASocket({ auth: state, printQRInTerminal: true });
+      this.client = makeWASocket({ auth: state, printQRInTerminal: false });
 
       this.client.ev.on('creds.update', saveCreds);
 

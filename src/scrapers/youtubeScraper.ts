@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { YoutubeTranscript } from 'youtube-transcript';
 import { logger } from '../utils/logger';
 
 export interface YouTubeVideo {
@@ -58,17 +57,11 @@ export class YouTubeScraper {
 
   async getTranscript(videoId: string): Promise<string> {
     try {
-      const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId, { lang: 'he' });
-      return transcriptItems.map((t) => t.text).join(' ');
-    } catch {
-      try {
-        // fallback to English transcript
-        const transcriptItems = await YoutubeTranscript.fetchTranscript(videoId);
-        return transcriptItems.map((t) => t.text).join(' ');
-      } catch (err) {
-        logger.warn(`No transcript available for video ${videoId}`, err);
-        return '';
-      }
+      const { fetchYouTubeTranscript } = await import('../utils/transcriptFetcher');
+      return await fetchYouTubeTranscript(videoId);
+    } catch (err) {
+      logger.warn(`No transcript available for video ${videoId}`);
+      return '';
     }
   }
 

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { b, e } from '../utils/html';
 import { StockMention } from './claudeAnalyzer';
 
 export interface StockData {
@@ -90,22 +91,22 @@ export class FinancialCrossRef {
   formatCrossRefSummary(results: CrossRefResult[]): string {
     if (results.length === 0) return 'No cross-reference data available.';
 
-    const lines: string[] = ['📉📈 *Cross-Reference Report*\n'];
+    const lines: string[] = [`📉📈 ${b('Cross-Reference Report')}\n`];
 
     for (const r of results) {
       const { mention, marketData, newsHeadlines } = r;
-      lines.push(`*${mention.ticker}*`);
+      lines.push(b(mention.ticker));
 
       if (marketData) {
         const dir = marketData.change >= 0 ? '▲' : '▼';
         lines.push(
-          `  Price: ${marketData.price.toFixed(2)} ${marketData.currency} ${dir} ${Math.abs(marketData.changePercent).toFixed(2)}%`
+          `  Price: ${marketData.price.toFixed(2)} ${e(marketData.currency)} ${dir} ${Math.abs(marketData.changePercent).toFixed(2)}%`
         );
       }
 
       if (newsHeadlines.length > 0) {
         lines.push(`  Recent news:`);
-        newsHeadlines.slice(0, 3).forEach((h) => lines.push(`  • ${h}`));
+        newsHeadlines.slice(0, 3).forEach((h) => lines.push(`  • ${e(h)}`));
       }
 
       const scoreLabel =
