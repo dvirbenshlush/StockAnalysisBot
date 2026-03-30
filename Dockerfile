@@ -16,14 +16,17 @@ ENV PYTHON="/opt/venv/bin/python3"
 
 WORKDIR /app
 
-# Install dependencies
+# Install all dependencies (including dev for TypeScript build)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 # Copy source and build
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm prune --omit=dev
 
 # Create sessions directory for persistent data
 RUN mkdir -p sessions
