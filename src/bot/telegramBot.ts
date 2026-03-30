@@ -15,6 +15,7 @@ const ADMIN_ID = parseInt(process.env.ADMIN_CHAT_ID ?? '1949447941', 10);
 
 export class TelegramBot {
   private bot: TelegramBotAPI;
+  private _webhookUrl: string | null = null;
   private readonly youtube: YouTubeScraper;
   private readonly telegram: TelegramScraper;
   private readonly whatsapp: WhatsAppScraper;
@@ -36,7 +37,9 @@ export class TelegramBot {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) throw new Error('TELEGRAM_BOT_TOKEN is required');
 
-    const webhookUrl = process.env.WEBHOOK_URL;
+    const webhookUrl = process.env.WEBHOOK_URL
+      ?? (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null);
+
     if (webhookUrl) {
       // Webhook mode for production (Railway) — no polling conflict
       this.bot = new TelegramBotAPI(token, {
@@ -48,6 +51,7 @@ export class TelegramBot {
         polling: { interval: 1000, autoStart: false },
       });
     }
+    this._webhookUrl = webhookUrl;
     this.youtube = youtube;
     this.telegram = telegram;
     this.whatsapp = whatsapp;
@@ -65,11 +69,10 @@ export class TelegramBot {
     await this.whatsapp.connect();
     this.scheduler.start();
 
-    const webhookUrl = process.env.WEBHOOK_URL;
-    if (webhookUrl) {
+    if (this._webhookUrl) {
       const token = process.env.TELEGRAM_BOT_TOKEN!;
-      await this.bot.setWebHook(`${webhookUrl}/bot${token}`);
-      logger.info(`Webhook set to ${webhookUrl}/bot<token>`);
+      await this.bot.setWebHook(`${this._webhookUrl}/bot${token}`);
+      logger.info(`Webhook mode active: ${this._webhookUrl}`);
     } else {
       // Clear any stale webhook before polling
       await this.bot.deleteWebHook();
@@ -80,7 +83,7 @@ export class TelegramBot {
   }
 
   stop(): void {
-    if (!process.env.WEBHOOK_URL) void this.bot.stopPolling();
+    if (!this._webhookUrl) void this.bot.stopPolling();
     if (this.pollInterval) clearInterval(this.pollInterval);
   }
 
