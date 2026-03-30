@@ -44,7 +44,9 @@ export class TelegramBot {
       });
     } else {
       // Polling mode for local dev
-      this.bot = new TelegramBotAPI(token, { polling: true });
+      this.bot = new TelegramBotAPI(token, {
+        polling: { interval: 1000, autoStart: false },
+      });
     }
     this.youtube = youtube;
     this.telegram = telegram;
@@ -69,14 +71,16 @@ export class TelegramBot {
       await this.bot.setWebHook(`${webhookUrl}/bot${token}`);
       logger.info(`Webhook set to ${webhookUrl}/bot<token>`);
     } else {
-      this.startPolling();
+      // Clear any stale webhook before polling
+      await this.bot.deleteWebHook();
+      this.startPollingWithRetry();
     }
 
     logger.info('Telegram bot started');
   }
 
   stop(): void {
-    if (!process.env.WEBHOOK_URL) this.bot.stopPolling();
+    if (!process.env.WEBHOOK_URL) void this.bot.stopPolling();
     if (this.pollInterval) clearInterval(this.pollInterval);
   }
 
@@ -391,11 +395,19 @@ export class TelegramBot {
     return `${summary}\n\n${crossRefSummary}`;
   }
 
-  private startPolling(): void {
-    const intervalMs = parseInt(process.env.POLL_INTERVAL_MS ?? '3600000', 10);
-    this.pollInterval = setInterval(() => {
-      logger.info('Scheduled analysis poll triggered');
-    }, intervalMs);
+  private startPollingWithRetry(): void {
+    this.bot.startPolling();
+
+    // If another instance is already polling, wait and retry
+    this.bot.on('polling_error', async (err: any) => {
+      if (err?.code === 'ETELEGRAM' && err?.message?.includes('409')) {
+        logger.warn('409 conflict — another instance running, waiting 15s before retrying...');
+        await this.bot.stopPolling();
+        await new Promise((r) => setTimeout(r, 15000));
+        logger.info('Retrying polling...');
+        this.bot.startPolling();
+      }
+    });
   }
 
   // Split messages longer than 4096 chars (Telegram limit)
